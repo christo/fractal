@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS=-Wall -Wextra -O3 -std=c99
-LIBS=-lm
+LIBS=-lm -lpthread
 TARGET=mandelbrot_fb
 SOURCE=mandelbrot_fb.c
 
