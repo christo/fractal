@@ -1,8 +1,7 @@
 # Mandelbrot Set Generator for Raspberry Pi
 
-This project includes code for generating Mandelbrot set images, primarily
-C programs for Raspberry Pi, running without X11, intended for a small TFT
-display. One uses SDL2 and one directly writes to the TFT framebuffer.
+This project generates Mandelbrot set images on Raspberry Pi with direct framebuffer access,
+designed for small TFT displays running without X11.
 
 There is also a sketch written in JavaScript for p5js.
 
@@ -16,7 +15,7 @@ sudo make install-deps
 Or manually:
 ``` bash
 sudo apt-get update
-sudo apt-get install libsdl2-dev build-essential
+sudo apt-get install build-essential
 ```
 
 ### 2. Compile
@@ -34,19 +33,28 @@ make run
 Or directly:
 
 ``` bash
-./mandelbrot
+./mandelbrot_fb
 ```
 
 ## Raspberry Pi Specific Notes
 
-- Works with or without X11 desktop environment
-- Uses SDL2's framebuffer support when X11 is unavailable
-- May require setting `SDL_VIDEODRIVER=fbcon` environment variable on some Pi configurations
+- Works without X11 desktop environment
+- Uses direct framebuffer access for TFT displays
+- Defaults to `/dev/fb1` (TFT display), but can target `/dev/fb0` (HDMI) with `-d` flag
+- Supports 16-bit (RGB565), 24-bit (RGB), and 32-bit (RGBA/BGRA) pixel formats
 - Performance varies by Pi model (Pi 3b was plenty quick for a TFT of 320x240)
+
+## Usage
+
+```bash
+./mandelbrot_fb              # Run on TFT display (/dev/fb1)
+./mandelbrot_fb -d /dev/fb0  # Run on HDMI display
+./mandelbrot_fb --help       # Show usage information
+```
 
 ## Controls
 
-- Press any key or close window to exit
+- Press Ctrl+C to exit
 - TODO: zoom and pan controls using touchscreen
 - TODO: use GPIO buttons
 
@@ -62,13 +70,6 @@ probably make no visible difference except on very high density displays
 - `COLOUR_SCALE`: Color cycling speed
 
 ## Troubleshooting
-
-If you get "No available video device" error:
-
-``` bash
-export SDL_VIDEODRIVER=fbcon
-./mandelbrot
-```
 
 For permission issues with framebuffer consider the following.
 
