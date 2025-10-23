@@ -29,6 +29,7 @@ int fb_fd = -1;
 char* fbp = NULL;
 long screensize = 0;
 volatile sig_atomic_t quit_flag = 0;
+const char* fb_device = "/dev/fb1";  // Default to TFT display
 
 // Signal handler for Ctrl+C
 void signal_handler(int sig) {
@@ -118,18 +119,48 @@ void cleanup() {
     }
 }
 
+void print_usage(const char* prog_name) {
+    printf("Usage: %s [options]\n", prog_name);
+    printf("Options:\n");
+    printf("  -d, --device <device>  Framebuffer device (default: /dev/fb1)\n");
+    printf("  -h, --help             Show this help message\n");
+    printf("\nExamples:\n");
+    printf("  %s                     # Use TFT display (/dev/fb1)\n", prog_name);
+    printf("  %s -d /dev/fb0         # Use HDMI display\n", prog_name);
+}
+
 int main(int argc, char* argv[]) {
     struct fb_var_screeninfo vinfo;
     struct fb_fix_screeninfo finfo;
-    
+
+    // Parse command-line arguments
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+            print_usage(argv[0]);
+            return 0;
+        } else if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--device") == 0) {
+            if (i + 1 < argc) {
+                fb_device = argv[++i];
+            } else {
+                fprintf(stderr, "Error: -d/--device requires an argument\n");
+                print_usage(argv[0]);
+                return 1;
+            }
+        } else {
+            fprintf(stderr, "Error: Unknown option '%s'\n", argv[i]);
+            print_usage(argv[0]);
+            return 1;
+        }
+    }
+
     // Set up signal handler for Ctrl+C
     signal(SIGINT, signal_handler);
-    
+
     // Open framebuffer device
-    fb_fd = open("/dev/fb1", O_RDWR);
+    fb_fd = open(fb_device, O_RDWR);
     if (fb_fd < 0) {
-        perror("Error opening /dev/fb1");
-        printf("Make sure your TFT display is properly configured.\n");
+        fprintf(stderr, "Error opening %s: ", fb_device);
+        perror("");
         return 1;
     }
     
@@ -147,12 +178,11 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     
-  /*
-    printf("Framebuffer info:\n");
+    printf("Framebuffer device: %s\n", fb_device);
+    printf("  Display: %s\n", finfo.id);
     printf("  Resolution: %dx%d\n", vinfo.xres, vinfo.yres);
     printf("  Bits per pixel: %d\n", vinfo.bits_per_pixel);
     printf("  Line length: %d bytes\n", finfo.line_length);
-    */
     
     // Check if our target resolution fits
     if (WIDTH > vinfo.xres || HEIGHT > vinfo.yres) {
@@ -172,7 +202,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     
-    printf("Framebuffer mapped successfully. Generating Mandelbrot set...\n");
+    printf("\nGenerating Mandelbrot set (%dx%d)...\n", WIDTH, HEIGHT);
     printf("Press Ctrl+C to exit.\n");
     
     // Clear screen (fill with black)
