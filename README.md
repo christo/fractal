@@ -30,7 +30,9 @@ make
 ``` bash
 make run
 ```
+
 Or directly:
+
 ``` bash
 ./mandelbrot
 ```
@@ -40,12 +42,13 @@ Or directly:
 - Works with or without X11 desktop environment
 - Uses SDL2's framebuffer support when X11 is unavailable
 - May require setting `SDL_VIDEODRIVER=fbcon` environment variable on some Pi configurations
-- Performance varies by Pi model (Pi 4 recommended for smooth rendering)
+- Performance varies by Pi model (Pi 3b was plenty quick for a TFT of 320x240)
 
 ## Controls
 
 - Press any key or close window to exit
-- Progress is printed to console during generation
+- TODO: zoom and pan controls using touchscreen
+- TODO: use GPIO buttons
 
 ## Configuration
 
@@ -54,7 +57,8 @@ You can modify these constants in the source code:
 - `SCALING`: Zoom level (smaller = more zoomed in)
 - `X_OFFSET`, `Y_OFFSET`: Center point of the view
 - `WIDTH`, `HEIGHT`: Output resolution
-- `MAXI`: Maximum iterations (higher = more detail, slower)
+- `MAXI`: Maximum iterations (higher = more detail, slower) numbers over 100
+probably make no visible difference except on very high density displays
 - `COLOUR_SCALE`: Color cycling speed
 
 ## Troubleshooting
