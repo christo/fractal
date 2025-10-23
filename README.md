@@ -12,7 +12,9 @@ There is also a sketch written in JavaScript for p5js.
 ``` bash
 sudo make install-deps
 ```
+
 Or manually:
+
 ``` bash
 sudo apt-get update
 sudo apt-get install build-essential
@@ -40,7 +42,7 @@ Or directly:
 
 - Works without X11 desktop environment
 - Uses direct framebuffer access for TFT displays
-- Defaults to `/dev/fb1` (TFT display), but can target `/dev/fb0` (HDMI) with `-d` flag
+- Defaults to `/dev/fb1` (TFT display), can target `/dev/fb0` (HDMI) with `-d` flag
 - Supports 16-bit (RGB565), 24-bit (RGB), and 32-bit (RGBA/BGRA) pixel formats
 - Performance varies by Pi model (Pi 3b was plenty quick for a TFT of 320x240)
 
