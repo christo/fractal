@@ -55,9 +55,9 @@ for a TFT of 320x240)
 
 ## TODO
 
-- [ ] add visual indicator of touchscreen centre
+- [x] add visual indicator of touchscreen centre
 - [x] derive WIDTH and HEIGHT from framebuffer
-- [ ] fix origin bias of touch zoom (probably need offset bias in complex plane
+- [x] fix origin bias of touch zoom (probably need offset bias in complex plane
 for centre)
 - [ ] use GPIO buttons for zoom out
 - [ ] use GPIO buttons for reset zoom

@@ -17,7 +17,7 @@
 #include <pthread.h>
 #include <errno.h>
 
-#define MAXI 360
+#define MAXI 360 
 #define COLOUR_SCALE 18
 
 // Mandelbrot parameters (now mutable for zoom/pan)
@@ -33,10 +33,12 @@ int height = 0;
 int touch_max_x = 4096;  // Default, will be queried
 int touch_max_y = 4096;  // Default, will be queried
 
-// Global variables for cleanup
+// Global variables for cleanup and shared state
 int fb_fd = -1;
 char* fbp = NULL;
 long screensize = 0;
+struct fb_var_screeninfo vinfo;
+struct fb_fix_screeninfo finfo;
 volatile sig_atomic_t quit_flag = 0;
 volatile sig_atomic_t redraw_flag = 0;
 const char* fb_device = "/dev/fb1";  // Default to TFT display
@@ -118,6 +120,24 @@ void set_pixel_fb(char* fbp, struct fb_var_screeninfo* vinfo,
             *(fbp + location + 1) = g;  // Green
             *(fbp + location + 2) = r;  // Red
         }
+    }
+}
+
+// Draw crosshair at touched point (for visual feedback)
+void draw_crosshair(char* fbp, struct fb_var_screeninfo* vinfo,
+                    struct fb_fix_screeninfo* finfo, int x, int y) {
+    // Draw vertical line through x (3 pixels wide)
+    for (int j = 0; j < height; j++) {
+        set_pixel_fb(fbp, vinfo, finfo, x, j, 0, 0, 0);
+        if (x > 0) set_pixel_fb(fbp, vinfo, finfo, x - 1, j, 0, 0, 0);
+        if (x < width - 1) set_pixel_fb(fbp, vinfo, finfo, x + 1, j, 0, 0, 0);
+    }
+
+    // Draw horizontal line through y (3 pixels wide)
+    for (int i = 0; i < width; i++) {
+        set_pixel_fb(fbp, vinfo, finfo, i, y, 0, 0, 0);
+        if (y > 0) set_pixel_fb(fbp, vinfo, finfo, i, y - 1, 0, 0, 0);
+        if (y < height - 1) set_pixel_fb(fbp, vinfo, finfo, i, y + 1, 0, 0, 0);
     }
 }
 
@@ -206,13 +226,15 @@ void* touch_handler(void* arg __attribute__((unused))) {
                     // Touch released - trigger zoom
                     if (touch_x >= 0 && touch_y >= 0) {
                         // Scale touch coordinates to screen coordinates
-                        // touch x is zero at right edge
-                        int screen_x = width - (touch_x * width / touch_max_x);
-                        int screen_y = touch_y * height / touch_max_y;
+                        // Display is rotated 90 degrees, so transform coordinates
+                        // For 90-degree counter-clockwise rotation: screen_x = max_y - touch_y, screen_y = touch_x
+                        int screen_x = (touch_max_y - touch_y) * width / touch_max_y;
+                        int screen_y = touch_x * height / touch_max_x;
 
                         if (screen_x >= 0 && screen_x < width &&
                             screen_y >= 0 && screen_y < height) {
                             printf("Touch detected at screen position (%d, %d)\n", screen_x, screen_y);
+                            draw_crosshair(fbp, &vinfo, &finfo, screen_x, screen_y);
                             zoom_to_point(screen_x, screen_y, 0.9);  // Zoom in by 10%
                         }
                     }
@@ -300,8 +322,6 @@ void print_usage(const char* prog_name) {
 }
 
 int main(int argc, char* argv[]) {
-    struct fb_var_screeninfo vinfo;
-    struct fb_fix_screeninfo finfo;
 
     // Parse command-line arguments
     for (int i = 1; i < argc; i++) {
