@@ -38,13 +38,14 @@ Or directly:
 ./mandelbrot_fb
 ```
 
-## Raspberry Pi Specific Notes
+## Features
 
 - Works without X11 desktop environment
 - Uses direct framebuffer access for TFT displays
 - Defaults to `/dev/fb1` (TFT display), can target `/dev/fb0` (HDMI) with `-d` flag
 - Supports 16-bit (RGB565), 24-bit (RGB), and 32-bit (RGBA/BGRA) pixel formats
-- Performance varies by Pi model (Pi 3b was plenty quick for a TFT of 320x240)
+- Performance varies by Pi model and screen resolution (Pi 3b was plenty quick
+for a TFT of 320x240)
 
 ## Usage
 
@@ -54,11 +55,16 @@ Or directly:
 ./mandelbrot_fb --help       # Show usage information
 ```
 
+## TODO
+
+* [ ] use GPIO buttons for zoom out
+* [ ] use GPIO buttons for reset zoom
+* [ ] touchscreen swipe to pan 
+
 ## Controls
 
 - Press Ctrl+C to exit
-- TODO: zoom and pan controls using touchscreen
-- TODO: use GPIO buttons
+- zoom controls using touchscreen
 
 ## Configuration
 
