@@ -4,6 +4,10 @@ LIBS=-lm -lpthread
 TARGET=mandelbrot
 SOURCE=mandelbrot.c
 
+# Remote development configuration
+PI_HOST ?= fractal.local
+PI_DIR ?= src/fractal
+
 # Default target - build framebuffer version
 all: $(TARGET)
 
@@ -24,4 +28,17 @@ clean:
 run: $(TARGET)
 	./$(TARGET)
 
-.PHONY: clean install-deps run all
+# Remote development targets
+remote-sync:
+	rsync -avz --exclude '$(TARGET)' --exclude '.git/' --exclude '.claude/' . $(PI_HOST):$(PI_DIR)
+
+remote-build: remote-sync
+	ssh $(PI_HOST) "cd $(PI_DIR) && make"
+
+remote-run: remote-build
+	ssh $(PI_HOST) "cd $(PI_DIR) && ./$(TARGET)"
+
+remote-clean:
+	ssh $(PI_HOST) "cd $(PI_DIR) && make clean"
+
+.PHONY: clean install-deps run all remote-sync remote-build remote-run remote-clean
