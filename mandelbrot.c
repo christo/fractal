@@ -256,6 +256,8 @@ void* touch_handler(void* arg __attribute__((unused))) {
 // Cleanup function
 void cleanup() {
     if (fbp && fbp != MAP_FAILED) {
+        // Blank the framebuffer before exit
+        memset(fbp, 0, screensize);
         munmap(fbp, screensize);
     }
     if (fb_fd >= 0) {
