@@ -1,8 +1,8 @@
 CC=gcc
 CFLAGS=-Wall -Wextra -O3 -std=c99
 LIBS=-lm -lpthread
-TARGET=mandelbrot_fb
-SOURCE=mandelbrot_fb.c
+TARGET=mandelbrot
+SOURCE=mandelbrot.c
 
 # Default target - build framebuffer version
 all: $(TARGET)

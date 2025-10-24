@@ -33,7 +33,7 @@ make run
 Or directly:
 
 ``` bash
-./mandelbrot_fb
+./mandelbrot
 ```
 
 ## Features
@@ -48,9 +48,9 @@ for a TFT of 320x240)
 ## Usage
 
 ```bash
-./mandelbrot_fb              # Run on TFT display /dev/fb1
-./mandelbrot_fb -d /dev/fb0  # Run on HDMI display
-./mandelbrot_fb --help       # Show usage information
+./mandelbrot              # Run on TFT display /dev/fb1
+./mandelbrot -d /dev/fb0  # Run on HDMI display
+./mandelbrot --help       # Show usage information
 ```
 
 ## TODO
