@@ -403,7 +403,50 @@ void cleanup() {
     pthread_mutex_destroy(&param_mutex);
 }
 
-// Render Mandelbrot set to framebuffer
+// Structure to pass parameters to render worker threads
+typedef struct {
+    char* fbp;
+    struct fb_var_screeninfo* vinfo;
+    struct fb_fix_screeninfo* finfo;
+    int start_row;
+    int end_row;
+    double scaling;
+    double x_offset;
+    double y_offset;
+} render_worker_args_t;
+
+// Worker thread function for parallel Mandelbrot rendering
+void* render_worker_thread(void* arg) {
+    render_worker_args_t* args = (render_worker_args_t*)arg;
+
+    // Render assigned rows
+    for (int j = args->start_row; j < args->end_row && !quit_flag; j++) {
+        for (int i = 0; i < width && !quit_flag; i++) {
+            // Convert pixel coordinates to complex plane coordinates
+            double u = i * args->scaling - args->x_offset;
+            double v = j * args->scaling - args->y_offset;
+
+            // Calculate iterations for this point
+            int n = mandelbrot_iterations(u, v);
+
+            // Calculate color based on iteration count
+            if (n == MAXI) {
+                // Point is in the set - color it black
+                set_pixel_fb(args->fbp, args->vinfo, args->finfo, i, j, 0, 0, 0);
+            } else {
+                // Point escaped - color based on iteration count
+                float hue = fmod((n * 360.0 * COLOUR_SCALE) / MAXI, 360.0);
+                uint8_t r, g, b;
+                hsb_to_rgb(hue, 1.0, 1.0, &r, &g, &b);
+                set_pixel_fb(args->fbp, args->vinfo, args->finfo, i, j, r, g, b);
+            }
+        }
+    }
+
+    return NULL;
+}
+
+// Render Mandelbrot set to framebuffer (multi-threaded)
 void render_mandelbrot(char* fbp, struct fb_var_screeninfo* vinfo,
                        struct fb_fix_screeninfo* finfo) {
     double local_scaling, local_x_offset, local_y_offset;
@@ -422,28 +465,33 @@ void render_mandelbrot(char* fbp, struct fb_var_screeninfo* vinfo,
     // Start timing
     clock_gettime(CLOCK_MONOTONIC, &start_time);
 
-    // Generate Mandelbrot set (no need to clear - every pixel gets overwritten)
-    for (int i = 0; i < width && !quit_flag; i++) {
-        for (int j = 0; j < height && !quit_flag; j++) {
-            // Convert pixel coordinates to complex plane coordinates
-            double u = i * local_scaling - local_x_offset;
-            double v = j * local_scaling - local_y_offset;
+    // Multi-threaded rendering: divide screen into horizontal bands
+    #define NUM_RENDER_THREADS 4
+    pthread_t render_threads[NUM_RENDER_THREADS];
+    render_worker_args_t worker_args[NUM_RENDER_THREADS];
 
-            // Calculate iterations for this point
-            int n = mandelbrot_iterations(u, v);
+    // Calculate rows per thread
+    int rows_per_thread = height / NUM_RENDER_THREADS;
 
-            // Calculate color based on iteration count
-            if (n == MAXI) {
-                // Point is in the set - color it black
-                set_pixel_fb(fbp, vinfo, finfo, i, j, 0, 0, 0);
-            } else {
-                // Point escaped - color based on iteration count
-                float hue = fmod((n * 360.0 * COLOUR_SCALE) / MAXI, 360.0);
-                uint8_t r, g, b;
-                hsb_to_rgb(hue, 1.0, 1.0, &r, &g, &b);
-                set_pixel_fb(fbp, vinfo, finfo, i, j, r, g, b);
-            }
+    // Create worker threads
+    for (int t = 0; t < NUM_RENDER_THREADS; t++) {
+        worker_args[t].fbp = fbp;
+        worker_args[t].vinfo = vinfo;
+        worker_args[t].finfo = finfo;
+        worker_args[t].start_row = t * rows_per_thread;
+        worker_args[t].end_row = (t == NUM_RENDER_THREADS - 1) ? height : (t + 1) * rows_per_thread;
+        worker_args[t].scaling = local_scaling;
+        worker_args[t].x_offset = local_x_offset;
+        worker_args[t].y_offset = local_y_offset;
+
+        if (pthread_create(&render_threads[t], NULL, render_worker_thread, &worker_args[t]) != 0) {
+            fprintf(stderr, "Error: Failed to create render thread %d\n", t);
         }
+    }
+
+    // Wait for all worker threads to complete
+    for (int t = 0; t < NUM_RENDER_THREADS; t++) {
+        pthread_join(render_threads[t], NULL);
     }
 
     // End timing and calculate elapsed time in milliseconds
@@ -451,7 +499,7 @@ void render_mandelbrot(char* fbp, struct fb_var_screeninfo* vinfo,
     long elapsed_ms = (end_time.tv_sec - start_time.tv_sec) * 1000 +
                       (end_time.tv_nsec - start_time.tv_nsec) / 1000000;
 
-    printf("Render complete in %ld ms.\n", elapsed_ms);
+    printf("Render complete in %ld ms (4 threads).\n", elapsed_ms);
 }
 
 void print_usage(const char* prog_name) {
