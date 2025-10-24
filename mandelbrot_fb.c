@@ -160,7 +160,6 @@ void* touch_handler(void* arg) {
     struct input_event ev;
     int touch_x = -1, touch_y = -1;
     bool touch_active = false;
-
     while (!quit_flag) {
         ssize_t n = read(touch_fd, &ev, sizeof(ev));
 
@@ -179,8 +178,8 @@ void* touch_handler(void* arg) {
                     // Touch released - trigger zoom
                     if (touch_x >= 0 && touch_y >= 0) {
                         // Scale touch coordinates to screen coordinates
-                        // Assuming touch coordinates need mapping (adjust if needed)
-                        int screen_x = touch_x * WIDTH / 4096;  // Adjust divisor based on actual touch range
+                        // touch x is zero at right edge
+                        int screen_x = WIDTH - (touch_x * WIDTH / 4096);
                         int screen_y = touch_y * HEIGHT / 4096;
 
                         if (screen_x >= 0 && screen_x < WIDTH &&
