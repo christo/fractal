@@ -48,9 +48,10 @@ for a TFT of 320x240)
 ## Usage
 
 ```bash
-./mandelbrot              # Run on TFT display /dev/fb1
-./mandelbrot -d /dev/fb0  # Run on HDMI display
-./mandelbrot --help       # Show usage information
+./mandelbrot                       # Run on TFT display /dev/fb1
+./mandelbrot -d /dev/fb0           # Run on HDMI display
+./mandelbrot -t /dev/input/event0  # specify touch device
+./mandelbrot --help                # Show usage information
 ```
 
 ## TODO

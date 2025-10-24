@@ -268,6 +268,7 @@ void cleanup() {
 void render_mandelbrot(char* fbp, struct fb_var_screeninfo* vinfo,
                        struct fb_fix_screeninfo* finfo) {
     double local_scaling, local_x_offset, local_y_offset;
+    struct timespec start_time, end_time;
 
     // Copy parameters with mutex protection
     pthread_mutex_lock(&param_mutex);
@@ -279,10 +280,10 @@ void render_mandelbrot(char* fbp, struct fb_var_screeninfo* vinfo,
     printf("Rendering Mandelbrot set (scaling=%.6f, x_off=%.6f, y_off=%.6f)...\n",
            local_scaling, local_x_offset, local_y_offset);
 
-    // Clear screen (fill with black)
-    memset(fbp, 0, screensize);
+    // Start timing
+    clock_gettime(CLOCK_MONOTONIC, &start_time);
 
-    // Generate Mandelbrot set
+    // Generate Mandelbrot set (no need to clear - every pixel gets overwritten)
     for (int i = 0; i < width && !quit_flag; i++) {
         for (int j = 0; j < height && !quit_flag; j++) {
             // Convert pixel coordinates to complex plane coordinates
@@ -306,7 +307,12 @@ void render_mandelbrot(char* fbp, struct fb_var_screeninfo* vinfo,
         }
     }
 
-    printf("Render complete.\n");
+    // End timing and calculate elapsed time in milliseconds
+    clock_gettime(CLOCK_MONOTONIC, &end_time);
+    long elapsed_ms = (end_time.tv_sec - start_time.tv_sec) * 1000 +
+                      (end_time.tv_nsec - start_time.tv_nsec) / 1000000;
+
+    printf("Render complete in %ld ms.\n", elapsed_ms);
 }
 
 void print_usage(const char* prog_name) {
@@ -396,7 +402,7 @@ int main(int argc, char* argv[]) {
         close(fb_fd);
         return 1;
     }
-    
+
     printf("\nGenerating Mandelbrot set (%dx%d)...\n", width, height);
     printf("Press Ctrl+C to exit. Touch screen to zoom in by 10%%.\n");
 
