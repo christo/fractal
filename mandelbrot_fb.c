@@ -38,7 +38,7 @@ const char* touch_device = "/dev/input/event4";  // Default touchscreen device (
 pthread_mutex_t param_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Signal handler for Ctrl+C
-void signal_handler(int sig) {
+void signal_handler(int sig __attribute__((unused))) {
     quit_flag = 1;
 }
 
@@ -146,7 +146,7 @@ void zoom_to_point(int screen_x, int screen_y, double zoom_factor) {
 }
 
 // Touch event handler thread
-void* touch_handler(void* arg) {
+void* touch_handler(void* arg __attribute__((unused))) {
     int touch_fd = open(touch_device, O_RDONLY | O_NONBLOCK);
     if (touch_fd < 0) {
         fprintf(stderr, "Warning: Could not open touch device %s: %s\n",
