@@ -19,13 +19,19 @@
 
 #define MAXI 360
 #define COLOUR_SCALE 18
-#define WIDTH 320
-#define HEIGHT 240
 
 // Mandelbrot parameters (now mutable for zoom/pan)
 double scaling = 0.013;
 double x_offset = 2.6;
 double y_offset = 1.6;
+
+// Runtime dimensions (determined from framebuffer)
+int width = 0;
+int height = 0;
+
+// Touch device coordinate ranges (determined at runtime)
+int touch_max_x = 4096;  // Default, will be queried
+int touch_max_y = 4096;  // Default, will be queried
 
 // Global variables for cleanup
 int fb_fd = -1;
@@ -145,6 +151,25 @@ void zoom_to_point(int screen_x, int screen_y, double zoom_factor) {
     redraw_flag = 1;
 }
 
+// Query touch device capabilities to get coordinate ranges
+void query_touch_capabilities(int touch_fd) {
+    struct input_absinfo abs_x, abs_y;
+
+    if (ioctl(touch_fd, EVIOCGABS(ABS_X), &abs_x) == 0) {
+        touch_max_x = abs_x.maximum;
+        printf("Touch X range: 0-%d\n", touch_max_x);
+    } else {
+        fprintf(stderr, "Warning: Could not query touch X range, using default %d\n", touch_max_x);
+    }
+
+    if (ioctl(touch_fd, EVIOCGABS(ABS_Y), &abs_y) == 0) {
+        touch_max_y = abs_y.maximum;
+        printf("Touch Y range: 0-%d\n", touch_max_y);
+    } else {
+        fprintf(stderr, "Warning: Could not query touch Y range, using default %d\n", touch_max_y);
+    }
+}
+
 // Touch event handler thread
 void* touch_handler(void* arg __attribute__((unused))) {
     int touch_fd = open(touch_device, O_RDONLY | O_NONBLOCK);
@@ -156,6 +181,9 @@ void* touch_handler(void* arg __attribute__((unused))) {
     }
 
     printf("Touch device opened: %s\n", touch_device);
+
+    // Query touch device capabilities
+    query_touch_capabilities(touch_fd);
 
     struct input_event ev;
     int touch_x = -1, touch_y = -1;
@@ -179,11 +207,11 @@ void* touch_handler(void* arg __attribute__((unused))) {
                     if (touch_x >= 0 && touch_y >= 0) {
                         // Scale touch coordinates to screen coordinates
                         // touch x is zero at right edge
-                        int screen_x = WIDTH - (touch_x * WIDTH / 4096);
-                        int screen_y = touch_y * HEIGHT / 4096;
+                        int screen_x = width - (touch_x * width / touch_max_x);
+                        int screen_y = touch_y * height / touch_max_y;
 
-                        if (screen_x >= 0 && screen_x < WIDTH &&
-                            screen_y >= 0 && screen_y < HEIGHT) {
+                        if (screen_x >= 0 && screen_x < width &&
+                            screen_y >= 0 && screen_y < height) {
                             printf("Touch detected at screen position (%d, %d)\n", screen_x, screen_y);
                             zoom_to_point(screen_x, screen_y, 0.9);  // Zoom in by 10%
                         }
@@ -233,8 +261,8 @@ void render_mandelbrot(char* fbp, struct fb_var_screeninfo* vinfo,
     memset(fbp, 0, screensize);
 
     // Generate Mandelbrot set
-    for (int i = 0; i < WIDTH && !quit_flag; i++) {
-        for (int j = 0; j < HEIGHT && !quit_flag; j++) {
+    for (int i = 0; i < width && !quit_flag; i++) {
+        for (int j = 0; j < height && !quit_flag; j++) {
             // Convert pixel coordinates to complex plane coordinates
             double u = i * local_scaling - local_x_offset;
             double v = j * local_scaling - local_y_offset;
@@ -328,19 +356,16 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     
+    // Set runtime dimensions from framebuffer
+    width = vinfo.xres;
+    height = vinfo.yres;
+
     printf("Framebuffer device: %s\n", fb_device);
     printf("  Display: %s\n", finfo.id);
-    printf("  Resolution: %dx%d\n", vinfo.xres, vinfo.yres);
+    printf("  Resolution: %dx%d\n", width, height);
     printf("  Bits per pixel: %d\n", vinfo.bits_per_pixel);
     printf("  Line length: %d bytes\n", finfo.line_length);
-    
-    // Check if our target resolution fits
-    if (WIDTH > vinfo.xres || HEIGHT > vinfo.yres) {
-        printf("Warning: Target resolution %dx%d is larger than framebuffer %dx%d\n", 
-               WIDTH, HEIGHT, vinfo.xres, vinfo.yres);
-        printf("The image will be clipped.\n");
-    }
-    
+
     // Calculate screen size in bytes
     screensize = vinfo.yres * finfo.line_length;
     
@@ -352,7 +377,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     
-    printf("\nGenerating Mandelbrot set (%dx%d)...\n", WIDTH, HEIGHT);
+    printf("\nGenerating Mandelbrot set (%dx%d)...\n", width, height);
     printf("Press Ctrl+C to exit. Touch screen to zoom in by 10%%.\n");
 
     // Start touch handler thread
