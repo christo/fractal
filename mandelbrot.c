@@ -34,7 +34,7 @@ long screensize = 0;
 volatile sig_atomic_t quit_flag = 0;
 volatile sig_atomic_t redraw_flag = 0;
 const char* fb_device = "/dev/fb1";  // Default to TFT display
-const char* touch_device = "/dev/input/event4";  // Default touchscreen device (stmpe-ts)
+const char* touch_device = "/dev/input/by-path/platform-3f204000.spi-cs-1-platform-stmpe-ts-event";  // Stable path to stmpe-ts touchscreen
 pthread_mutex_t param_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // Signal handler for Ctrl+C
