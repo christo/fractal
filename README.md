@@ -60,8 +60,9 @@ for a TFT of 320x240)
 - [x] derive WIDTH and HEIGHT from framebuffer
 - [x] fix origin bias of touch zoom (probably need offset bias in complex plane
 for centre)
-- [ ] use GPIO buttons for zoom out
-- [ ] use GPIO buttons for reset zoom
+- [x] use GPIO buttons for zoom out
+- [x] use GPIO buttons for reset zoom
+- [ ] test button 4 for electrical continuity (what GPIO?)
 - [ ] touchscreen swipe to pan
 
 ## Controls
