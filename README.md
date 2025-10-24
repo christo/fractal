@@ -3,8 +3,6 @@
 This project generates Mandelbrot set images on Raspberry Pi with direct framebuffer access,
 designed for small TFT displays running without X11.
 
-There is also a sketch written in JavaScript for p5js.
-
 ## Setup Instructions
 
 ### 1. Install Dependencies
