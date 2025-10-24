@@ -50,16 +50,20 @@ for a TFT of 320x240)
 ## Usage
 
 ```bash
-./mandelbrot_fb              # Run on TFT display (/dev/fb1)
+./mandelbrot_fb              # Run on TFT display /dev/fb1
 ./mandelbrot_fb -d /dev/fb0  # Run on HDMI display
 ./mandelbrot_fb --help       # Show usage information
 ```
 
 ## TODO
 
-* [ ] use GPIO buttons for zoom out
-* [ ] use GPIO buttons for reset zoom
-* [ ] touchscreen swipe to pan 
+- [ ] add visual indicator of touchscreen centre
+- [ ] derive WIDTH and HEIGHT from framebuffer
+- [ ] fix origin bias of touch zoom (probably need offset bias in complex plane
+for centre)
+- [ ] use GPIO buttons for zoom out
+- [ ] use GPIO buttons for reset zoom
+- [ ] touchscreen swipe to pan
 
 ## Controls
 
