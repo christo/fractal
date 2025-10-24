@@ -42,6 +42,7 @@ Or directly:
 - Uses direct framebuffer access for TFT displays
 - Defaults to `/dev/fb1` (TFT display), can target `/dev/fb0` (HDMI) with `-d` flag
 - Supports 16-bit (RGB565), 24-bit (RGB), and 32-bit (RGBA/BGRA) pixel formats
+- Multi-threaded rendering (4 worker threads) for optimal performance on multi-core Raspberry Pi
 - Performance varies by Pi model and screen resolution (Pi 3b was plenty quick
 for a TFT of 320x240)
 
@@ -62,8 +63,8 @@ for a TFT of 320x240)
 for centre)
 - [x] use GPIO buttons for zoom out
 - [x] use GPIO buttons for reset zoom
+- [x] concurrency for 4-core rpi (4 render threads + touch/button handlers)
 - [ ] test button 4 for electrical continuity (what GPIO?)
-- [ ] concurrency for 4-core rpi
 - [ ] touchscreen swipe to pan
 
 ## Controls
