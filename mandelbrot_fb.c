@@ -92,7 +92,7 @@ int mandelbrot_iterations(double u, double v) {
 void set_pixel_fb(char* fbp, struct fb_var_screeninfo* vinfo, 
                   struct fb_fix_screeninfo* finfo, int x, int y, 
                   uint8_t r, uint8_t g, uint8_t b) {
-    if (x >= 0 && x < vinfo->xres && y >= 0 && y < vinfo->yres) {
+    if (x >= 0 && x < (int)vinfo->xres && y >= 0 && y < (int)vinfo->yres) {
         long location = (x + vinfo->xoffset) * (vinfo->bits_per_pixel/8) + 
                        (y + vinfo->yoffset) * finfo->line_length;
         
