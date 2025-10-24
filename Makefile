@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS=-Wall -Wextra -O3 -std=c99
-LIBS=-lm -lpthread
+LIBS=-lm -lpthread -lgpiod
 TARGET=mandelbrot
 SOURCE=mandelbrot.c
 
@@ -18,7 +18,7 @@ $(TARGET): $(SOURCE)
 # Install build dependencies
 install-deps:
 	apt-get update
-	apt-get install -y build-essential
+	apt-get install -y build-essential libgpiod-dev
 
 # Clean build artifacts
 clean:

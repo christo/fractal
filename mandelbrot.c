@@ -16,6 +16,7 @@
 #include <string.h>
 #include <pthread.h>
 #include <errno.h>
+#include <gpiod.h>
 
 #define MAXI 360 
 #define COLOUR_SCALE 18
@@ -32,6 +33,13 @@ int height = 0;
 // Touch device coordinate ranges (determined at runtime)
 int touch_max_x = 4096;  // Default, will be queried
 int touch_max_y = 4096;  // Default, will be queried
+
+// Button GPIO definitions (mapped to actual hardware)
+#define BUTTON_GPIO_1 23  // Physical button 1
+#define BUTTON_GPIO_2 22  // Physical button 2
+#define BUTTON_GPIO_3 27  // Physical button 3
+#define BUTTON_GPIO_4 17  // Physical button 4 (may not be connected)
+#define GPIO_CHIP "gpiochip0"
 
 // Global variables for cleanup and shared state
 int fb_fd = -1;
@@ -253,6 +261,135 @@ void* touch_handler(void* arg __attribute__((unused))) {
     return NULL;
 }
 
+// Button handler thread using libgpiod v2 API
+void* button_handler(void* arg __attribute__((unused))) {
+    struct gpiod_chip *chip;
+    struct gpiod_line_settings *settings;
+    struct gpiod_line_config *line_cfg;
+    struct gpiod_request_config *req_cfg;
+    struct gpiod_line_request *request;
+    unsigned int offsets[4] = {BUTTON_GPIO_1, BUTTON_GPIO_2, BUTTON_GPIO_3, BUTTON_GPIO_4};
+    enum gpiod_line_value values[4];
+    int prev_values[4] = {1, 1, 1, 1};  // Buttons are active-low (pressed = 0)
+
+    // Open GPIO chip
+    chip = gpiod_chip_open("/dev/" GPIO_CHIP);
+    if (!chip) {
+        fprintf(stderr, "Warning: Could not open GPIO chip %s: %s\n",
+                GPIO_CHIP, strerror(errno));
+        fprintf(stderr, "Button input will be disabled.\n");
+        return NULL;
+    }
+
+    // Create line settings for input with pull-up
+    settings = gpiod_line_settings_new();
+    if (!settings) {
+        fprintf(stderr, "Warning: Could not create line settings\n");
+        gpiod_chip_close(chip);
+        return NULL;
+    }
+
+    gpiod_line_settings_set_direction(settings, GPIOD_LINE_DIRECTION_INPUT);
+    gpiod_line_settings_set_bias(settings, GPIOD_LINE_BIAS_PULL_UP);
+
+    // Create line config and add settings for all button lines
+    line_cfg = gpiod_line_config_new();
+    if (!line_cfg) {
+        fprintf(stderr, "Warning: Could not create line config\n");
+        gpiod_line_settings_free(settings);
+        gpiod_chip_close(chip);
+        return NULL;
+    }
+
+    for (int i = 0; i < 4; i++) {
+        if (gpiod_line_config_add_line_settings(line_cfg, &offsets[i], 1, settings) < 0) {
+            fprintf(stderr, "Warning: Could not add line %d to config\n", offsets[i]);
+            gpiod_line_config_free(line_cfg);
+            gpiod_line_settings_free(settings);
+            gpiod_chip_close(chip);
+            return NULL;
+        }
+    }
+
+    // Create request config
+    req_cfg = gpiod_request_config_new();
+    if (!req_cfg) {
+        fprintf(stderr, "Warning: Could not create request config\n");
+        gpiod_line_config_free(line_cfg);
+        gpiod_line_settings_free(settings);
+        gpiod_chip_close(chip);
+        return NULL;
+    }
+    gpiod_request_config_set_consumer(req_cfg, "mandelbrot");
+
+    // Request the lines
+    request = gpiod_chip_request_lines(chip, req_cfg, line_cfg);
+    if (!request) {
+        fprintf(stderr, "Warning: Could not request GPIO lines: %s\n", strerror(errno));
+        gpiod_request_config_free(req_cfg);
+        gpiod_line_config_free(line_cfg);
+        gpiod_line_settings_free(settings);
+        gpiod_chip_close(chip);
+        return NULL;
+    }
+
+    printf("Button monitoring enabled on GPIOs %d, %d, %d, %d\n",
+           BUTTON_GPIO_1, BUTTON_GPIO_2, BUTTON_GPIO_3, BUTTON_GPIO_4);
+
+    // Monitor buttons
+    while (!quit_flag) {
+        // Read current button states
+        if (gpiod_line_request_get_values(request, values) < 0) {
+            fprintf(stderr, "Warning: Error reading GPIO values\n");
+            break;
+        }
+
+        // Check for button press events (transition from 1 to 0, active-low)
+        for (int i = 0; i < 4; i++) {
+            if (prev_values[i] == 1 && values[i] == GPIOD_LINE_VALUE_INACTIVE) {
+                // Button pressed
+                printf("Button %d (GPIO %d) pressed\n", i + 1, offsets[i]);
+
+                // Button actions
+                switch(i) {
+                    case 0:  // Button 1 (GPIO 17) - Zoom in to center
+                        printf("  -> Zoom in to center\n");
+                        zoom_to_point(width / 2, height / 2, 0.5);
+                        break;
+                    case 1:  // Button 2 (GPIO 22) - Zoom out from center
+                        printf("  -> Zoom out from center\n");
+                        zoom_to_point(width / 2, height / 2, 2.0);
+                        break;
+                    case 2:  // Button 3 (GPIO 23) - Reset to initial view
+                        printf("  -> Reset view\n");
+                        pthread_mutex_lock(&param_mutex);
+                        scaling = 0.013;
+                        x_offset = 2.6;
+                        y_offset = 1.6;
+                        pthread_mutex_unlock(&param_mutex);
+                        redraw_flag = 1;
+                        break;
+                    case 3:  // Button 4 (GPIO 27) - Reserved for future use
+                        printf("  -> Button 4 (reserved)\n");
+                        break;
+                }
+            }
+            prev_values[i] = (values[i] == GPIOD_LINE_VALUE_ACTIVE) ? 1 : 0;
+        }
+
+        usleep(50000);  // Sleep 50ms between reads (debouncing)
+    }
+
+    // Cleanup
+    gpiod_line_request_release(request);
+    gpiod_request_config_free(req_cfg);
+    gpiod_line_config_free(line_cfg);
+    gpiod_line_settings_free(settings);
+    gpiod_chip_close(chip);
+
+    return NULL;
+}
+
 // Cleanup function
 void cleanup() {
     if (fbp && fbp != MAP_FAILED) {
@@ -406,12 +543,20 @@ int main(int argc, char* argv[]) {
     }
 
     printf("\nGenerating Mandelbrot set (%dx%d)...\n", width, height);
-    printf("Press Ctrl+C to exit. Touch screen to zoom in by 10%%.\n");
+    printf("Press Ctrl+C to exit.\n");
+    printf("Touch screen to zoom in by 10%% at touched point.\n");
+    printf("Buttons: 1=Zoom In Center, 2=Zoom Out Center, 3=Reset View, 4=Reserved\n");
 
     // Start touch handler thread
     pthread_t touch_thread;
     if (pthread_create(&touch_thread, NULL, touch_handler, NULL) != 0) {
         fprintf(stderr, "Warning: Failed to create touch handler thread\n");
+    }
+
+    // Start button handler thread
+    pthread_t button_thread;
+    if (pthread_create(&button_thread, NULL, button_handler, NULL) != 0) {
+        fprintf(stderr, "Warning: Failed to create button handler thread\n");
     }
 
     // Initial render
@@ -428,9 +573,10 @@ int main(int argc, char* argv[]) {
 
     printf("\nExiting...\n");
 
-    // Wait for touch thread to finish
+    // Wait for threads to finish
     pthread_join(touch_thread, NULL);
-    
+    pthread_join(button_thread, NULL);
+
     // Cleanup
     cleanup();
     printf("Cleanup complete.\n");
