@@ -1,0 +1,15 @@
+[Unit]
+Description=Mandelbrot Fractal Generator
+After=graphical.target
+
+[Service]
+Type=simple
+User=christo
+WorkingDirectory=/home/christo/src/christo/fractal
+ExecStart=/home/christo/src/christo/fractal/launch.sh
+Restart=no
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=graphical.target

@@ -28,6 +28,21 @@ clean:
 run: $(TARGET)
 	./$(TARGET)
 
+# Install systemd service (run on Pi)
+install-service:
+	cp mandelbrot.service /etc/systemd/system/
+	systemctl daemon-reload
+	systemctl enable mandelbrot
+	@echo "Service installed and enabled. Start with: sudo systemctl start mandelbrot"
+
+# Uninstall systemd service (run on Pi)
+uninstall-service:
+	systemctl stop mandelbrot || true
+	systemctl disable mandelbrot || true
+	rm -f /etc/systemd/system/mandelbrot.service
+	systemctl daemon-reload
+	@echo "Service uninstalled"
+
 # Remote development targets
 remote-sync:
 	rsync -avz --exclude '$(TARGET)' --exclude '.git/' --exclude '.claude/' . $(PI_HOST):$(PI_DIR)
@@ -41,4 +56,10 @@ remote-run: remote-build
 remote-clean:
 	ssh $(PI_HOST) "cd $(PI_DIR) && make clean"
 
-.PHONY: clean install-deps run all remote-sync remote-build remote-run remote-clean
+remote-install-service: remote-sync
+	ssh $(PI_HOST) "cd $(PI_DIR) && sudo make install-service"
+
+remote-uninstall-service:
+	ssh $(PI_HOST) "cd $(PI_DIR) && sudo make uninstall-service"
+
+.PHONY: clean install-deps run all install-service uninstall-service remote-sync remote-build remote-run remote-clean remote-install-service remote-uninstall-service

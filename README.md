@@ -91,3 +91,60 @@ For permission issues with framebuffer consider the following.
 sudo usermod -a -G video $USER
 ```
 (Then log out and back in)
+
+## Autostart on Boot
+
+To run the Mandelbrot generator automatically when the Raspberry Pi boots:
+
+### Install the systemd service
+
+**Option 1: Using Makefile (easiest)**
+
+```bash
+# From development machine
+make remote-install-service
+
+# Or directly on the Pi
+sudo make install-service
+sudo systemctl start mandelbrot
+```
+
+**Option 2: Manual installation**
+
+```bash
+sudo cp mandelbrot.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable mandelbrot
+sudo systemctl start mandelbrot
+```
+
+### Managing the service
+
+```bash
+# Check status
+sudo systemctl status mandelbrot
+
+# View logs in real-time
+journalctl -u mandelbrot -f
+
+# Stop the service
+sudo systemctl stop mandelbrot
+
+# Disable autostart
+sudo systemctl disable mandelbrot
+
+# Restart the service
+sudo systemctl restart mandelbrot
+```
+
+### Uninstall the service
+
+```bash
+# From development machine
+make remote-uninstall-service
+
+# Or directly on the Pi
+sudo make uninstall-service
+```
+
+**Note:** The service uses `launch.sh` which ensures only one instance runs at a time. Manual launches while the service is running will safely exit without starting a duplicate process.
