@@ -157,24 +157,6 @@ void set_pixel_fb(char* fbp, struct fb_var_screeninfo* vinfo,
     }
 }
 
-// Draw crosshair at touched point (for visual feedback)
-void draw_crosshair(char* fbp, struct fb_var_screeninfo* vinfo,
-                    struct fb_fix_screeninfo* finfo, int x, int y) {
-    // Draw vertical line through x (3 pixels wide)
-    for (int j = 0; j < height; j++) {
-        set_pixel_fb(fbp, vinfo, finfo, x, j, 0, 0, 0);
-        if (x > 0) set_pixel_fb(fbp, vinfo, finfo, x - 1, j, 0, 0, 0);
-        if (x < width - 1) set_pixel_fb(fbp, vinfo, finfo, x + 1, j, 0, 0, 0);
-    }
-
-    // Draw horizontal line through y (3 pixels wide)
-    for (int i = 0; i < width; i++) {
-        set_pixel_fb(fbp, vinfo, finfo, i, y, 0, 0, 0);
-        if (y > 0) set_pixel_fb(fbp, vinfo, finfo, i, y - 1, 0, 0, 0);
-        if (y < height - 1) set_pixel_fb(fbp, vinfo, finfo, i, y + 1, 0, 0, 0);
-    }
-}
-
 // Get current time in milliseconds
 long get_time_ms() {
     struct timespec ts;
@@ -282,7 +264,6 @@ void* touch_handler(void* arg __attribute__((unused))) {
                         if (screen_x >= 0 && screen_x < width &&
                             screen_y >= 0 && screen_y < height) {
                             printf("Touch detected at screen position (%d, %d)\n", screen_x, screen_y);
-                            draw_crosshair(fbp, &vinfo, &finfo, screen_x, screen_y);
                             zoom_to_point(screen_x, screen_y, 0.9);  // Zoom in by 10%
                         }
                     }
