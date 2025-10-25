@@ -18,13 +18,21 @@
 #include <errno.h>
 #include <gpiod.h>
 
-#define MAXI 360 
+#define MAXI 360
 #define COLOUR_SCALE 18
+
+// Idle animation configuration
+#define IDLE_TIMEOUT_MS 10000      // 10 seconds of inactivity before animation starts
+#define ANIMATION_STEP_MS 50       // Time between animation frames
+#define SNAP_DELTA_SCALING 0.0001  // Snap when scaling difference < this
+#define SNAP_DELTA_OFFSET 0.001    // Snap when offset difference < this
+#define INTERPOLATION_SPEED 0.05   // How much to move toward target each step (0.0-1.0)
 
 // Mandelbrot parameters (now mutable for zoom/pan)
 double scaling = 0.013;
 double x_offset = 2.6;
 double y_offset = 1.6;
+int colour_offset = 0;  // Color cycle offset (0 to COLOUR_SCALE-1)
 
 // Runtime dimensions (determined from framebuffer)
 int width = 0;
@@ -38,8 +46,16 @@ int touch_max_y = 4096;  // Default, will be queried
 #define BUTTON_GPIO_1 23  // Physical button 1
 #define BUTTON_GPIO_2 22  // Physical button 2
 #define BUTTON_GPIO_3 27  // Physical button 3
-#define BUTTON_GPIO_4 17  // Physical button 4 (may not be connected)
+#define BUTTON_GPIO_4 18  // Physical button 4 (pin 12)
 #define GPIO_CHIP "gpiochip0"
+
+// Saved view structure
+typedef struct {
+    double scaling;
+    double x_offset;
+    double y_offset;
+    int colour_offset;
+} saved_view_t;
 
 // Global variables for cleanup and shared state
 int fb_fd = -1;
@@ -52,6 +68,16 @@ volatile sig_atomic_t redraw_flag = 0;
 const char* fb_device = "/dev/fb1";  // Default to TFT display
 const char* touch_device = "/dev/input/by-path/platform-3f204000.spi-cs-1-platform-stmpe-ts-event";  // Stable path to stmpe-ts touchscreen
 pthread_mutex_t param_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+// Saved views array
+#define MAX_SAVED_VIEWS 1000
+saved_view_t saved_views[MAX_SAVED_VIEWS];
+int num_saved_views = 0;
+
+// Idle animation state
+volatile sig_atomic_t last_interaction_time = 0;
+volatile sig_atomic_t animating = 0;
+int current_target_view = 0;
 
 // Signal handler for Ctrl+C
 void signal_handler(int sig __attribute__((unused))) {
@@ -149,8 +175,22 @@ void draw_crosshair(char* fbp, struct fb_var_screeninfo* vinfo,
     }
 }
 
+// Get current time in milliseconds
+long get_time_ms() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+// Reset idle timer (call on any user interaction)
+void reset_idle_timer() {
+    last_interaction_time = get_time_ms();
+    animating = 0;
+}
+
 // Zoom to a specific point
 void zoom_to_point(int screen_x, int screen_y, double zoom_factor) {
+    reset_idle_timer();
     pthread_mutex_lock(&param_mutex);
 
     // Convert screen coordinates to complex plane coordinates using current transform
@@ -350,27 +390,61 @@ void* button_handler(void* arg __attribute__((unused))) {
                 // Button pressed
                 printf("Button %d (GPIO %d) pressed\n", i + 1, offsets[i]);
 
+                // Reset idle timer on any button press
+                reset_idle_timer();
+
                 // Button actions
                 switch(i) {
-                    case 0:  // Button 1 (GPIO 17) - Zoom in to center
-                        printf("  -> Zoom in to center\n");
-                        zoom_to_point(width / 2, height / 2, 0.5);
+                    case 0:  // Button 1 - Save current view
+                        printf("  -> Save current view\n");
+                        if (pthread_mutex_trylock(&param_mutex) == 0) {
+                            FILE* save_file = fopen("saved_view.txt", "a");
+                            if (save_file) {
+                                fprintf(save_file, "scaling=%.10f\n", scaling);
+                                fprintf(save_file, "x_offset=%.10f\n", x_offset);
+                                fprintf(save_file, "y_offset=%.10f\n", y_offset);
+                                fprintf(save_file, "colour_offset=%d\n", colour_offset);
+                                fclose(save_file);
+
+                                // Also add to in-memory array for animation
+                                if (num_saved_views < MAX_SAVED_VIEWS) {
+                                    saved_views[num_saved_views].scaling = scaling;
+                                    saved_views[num_saved_views].x_offset = x_offset;
+                                    saved_views[num_saved_views].y_offset = y_offset;
+                                    saved_views[num_saved_views].colour_offset = colour_offset;
+                                    num_saved_views++;
+                                    printf("  -> View saved (now %d saved views in animation)\n", num_saved_views);
+                                } else {
+                                    printf("  -> View saved to file (max views reached: %d)\n", MAX_SAVED_VIEWS);
+                                }
+                            } else {
+                                fprintf(stderr, "  -> Error: Could not save view\n");
+                            }
+                            pthread_mutex_unlock(&param_mutex);
+                        } else {
+                            printf("  -> Save already in progress, skipping\n");
+                        }
                         break;
-                    case 1:  // Button 2 (GPIO 22) - Zoom out from center
+                    case 1:  // Button 2 - Zoom out from center
                         printf("  -> Zoom out from center\n");
                         zoom_to_point(width / 2, height / 2, 2.0);
                         break;
-                    case 2:  // Button 3 (GPIO 23) - Reset to initial view
+                    case 2:  // Button 3 - Reset to initial view
                         printf("  -> Reset view\n");
                         pthread_mutex_lock(&param_mutex);
                         scaling = 0.013;
                         x_offset = 2.6;
                         y_offset = 1.6;
+                        colour_offset = 0;
                         pthread_mutex_unlock(&param_mutex);
                         redraw_flag = 1;
                         break;
-                    case 3:  // Button 4 (GPIO 27) - Reserved for future use
-                        printf("  -> Button 4 (reserved)\n");
+                    case 3:  // Button 4 - Cycle color palette
+                        pthread_mutex_lock(&param_mutex);
+                        colour_offset = (colour_offset + 1) % COLOUR_SCALE;
+                        pthread_mutex_unlock(&param_mutex);
+                        printf("  -> Color cycle (offset: %d/%d)\n", colour_offset, COLOUR_SCALE);
+                        redraw_flag = 1;
                         break;
                 }
             }
@@ -413,6 +487,7 @@ typedef struct {
     double scaling;
     double x_offset;
     double y_offset;
+    int colour_offset;
 } render_worker_args_t;
 
 // Worker thread function for parallel Mandelbrot rendering
@@ -434,8 +509,8 @@ void* render_worker_thread(void* arg) {
                 // Point is in the set - color it black
                 set_pixel_fb(args->fbp, args->vinfo, args->finfo, i, j, 0, 0, 0);
             } else {
-                // Point escaped - color based on iteration count
-                float hue = fmod((n * 360.0 * COLOUR_SCALE) / MAXI, 360.0);
+                // Point escaped - color based on iteration count with offset
+                float hue = fmod((n * 360.0 * COLOUR_SCALE) / MAXI + args->colour_offset * 360.0 / COLOUR_SCALE, 360.0);
                 uint8_t r, g, b;
                 hsb_to_rgb(hue, 1.0, 1.0, &r, &g, &b);
                 set_pixel_fb(args->fbp, args->vinfo, args->finfo, i, j, r, g, b);
@@ -450,6 +525,7 @@ void* render_worker_thread(void* arg) {
 void render_mandelbrot(char* fbp, struct fb_var_screeninfo* vinfo,
                        struct fb_fix_screeninfo* finfo) {
     double local_scaling, local_x_offset, local_y_offset;
+    int local_colour_offset;
     struct timespec start_time, end_time;
 
     // Copy parameters with mutex protection
@@ -457,6 +533,7 @@ void render_mandelbrot(char* fbp, struct fb_var_screeninfo* vinfo,
     local_scaling = scaling;
     local_x_offset = x_offset;
     local_y_offset = y_offset;
+    local_colour_offset = colour_offset;
     pthread_mutex_unlock(&param_mutex);
 
     printf("Rendering Mandelbrot set (scaling=%.6f, x_off=%.6f, y_off=%.6f)...\n",
@@ -483,6 +560,7 @@ void render_mandelbrot(char* fbp, struct fb_var_screeninfo* vinfo,
         worker_args[t].scaling = local_scaling;
         worker_args[t].x_offset = local_x_offset;
         worker_args[t].y_offset = local_y_offset;
+        worker_args[t].colour_offset = local_colour_offset;
 
         if (pthread_create(&render_threads[t], NULL, render_worker_thread, &worker_args[t]) != 0) {
             fprintf(stderr, "Error: Failed to create render thread %d\n", t);
@@ -500,6 +578,42 @@ void render_mandelbrot(char* fbp, struct fb_var_screeninfo* vinfo,
                       (end_time.tv_nsec - start_time.tv_nsec) / 1000000;
 
     printf("Render complete in %ld ms (4 threads).\n", elapsed_ms);
+}
+
+// Load saved views from file
+void load_saved_views(const char* filename) {
+    FILE* file = fopen(filename, "r");
+    if (!file) {
+        printf("No saved views file found (%s), starting fresh.\n", filename);
+        return;
+    }
+
+    num_saved_views = 0;
+    char line[256];
+    saved_view_t current_view = {0};
+    int fields_read = 0;
+
+    while (fgets(line, sizeof(line), file) && num_saved_views < MAX_SAVED_VIEWS) {
+        if (sscanf(line, "scaling=%lf", &current_view.scaling) == 1) {
+            fields_read++;
+        } else if (sscanf(line, "x_offset=%lf", &current_view.x_offset) == 1) {
+            fields_read++;
+        } else if (sscanf(line, "y_offset=%lf", &current_view.y_offset) == 1) {
+            fields_read++;
+        } else if (sscanf(line, "colour_offset=%d", &current_view.colour_offset) == 1) {
+            fields_read++;
+        }
+
+        // If we've read all 4 fields, save the view
+        if (fields_read == 4) {
+            saved_views[num_saved_views++] = current_view;
+            fields_read = 0;
+            memset(&current_view, 0, sizeof(current_view));
+        }
+    }
+
+    fclose(file);
+    printf("Loaded %d saved view(s) from %s\n", num_saved_views, filename);
 }
 
 void print_usage(const char* prog_name) {
@@ -590,10 +704,20 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // Load saved views from file
+    load_saved_views("saved_view.txt");
+
     printf("\nGenerating Mandelbrot set (%dx%d)...\n", width, height);
     printf("Press Ctrl+C to exit.\n");
     printf("Touch screen to zoom in by 10%% at touched point.\n");
-    printf("Buttons: 1=Zoom In Center, 2=Zoom Out Center, 3=Reset View, 4=Reserved\n");
+    printf("Buttons: 1=Save View, 2=Zoom Out Center, 3=Reset View, 4=Color Cycle\n");
+    if (num_saved_views > 0) {
+        printf("Idle animation enabled: will cycle through %d saved view(s) after %d seconds.\n",
+               num_saved_views, IDLE_TIMEOUT_MS / 1000);
+    }
+
+    // Initialize idle timer
+    reset_idle_timer();
 
     // Start touch handler thread
     pthread_t touch_thread;
@@ -612,11 +736,72 @@ int main(int argc, char* argv[]) {
 
     // Main event loop - wait for redraw requests or quit
     while (!quit_flag) {
+        long current_time = get_time_ms();
+        long idle_time = current_time - last_interaction_time;
+
+        // Check if we should start/continue animation
+        if (num_saved_views > 0 && idle_time >= IDLE_TIMEOUT_MS) {
+            if (!animating) {
+                // Start animation to next saved view
+                animating = 1;
+                current_target_view = (current_target_view + 1) % num_saved_views;
+                printf("Idle timeout - animating to saved view %d/%d\n",
+                       current_target_view + 1, num_saved_views);
+            }
+
+            // Perform interpolation step
+            pthread_mutex_lock(&param_mutex);
+            saved_view_t* target = &saved_views[current_target_view];
+
+            double delta_scaling = fabs(scaling - target->scaling);
+            double delta_x = fabs(x_offset - target->x_offset);
+            double delta_y = fabs(y_offset - target->y_offset);
+
+            // Check if close enough to snap position/zoom (not colour yet)
+            if (delta_scaling < SNAP_DELTA_SCALING &&
+                delta_x < SNAP_DELTA_OFFSET &&
+                delta_y < SNAP_DELTA_OFFSET) {
+                // Snap position/zoom to target
+                scaling = target->scaling;
+                x_offset = target->x_offset;
+                y_offset = target->y_offset;
+
+                // Cycle colour one step toward target
+                if (colour_offset != target->colour_offset) {
+                    // Calculate shortest path considering wraparound
+                    int diff = target->colour_offset - colour_offset;
+                    int forward_steps = (diff + COLOUR_SCALE) % COLOUR_SCALE;
+                    int backward_steps = (COLOUR_SCALE - forward_steps) % COLOUR_SCALE;
+
+                    if (forward_steps <= backward_steps && forward_steps > 0) {
+                        colour_offset = (colour_offset + 1) % COLOUR_SCALE;
+                    } else if (backward_steps > 0) {
+                        colour_offset = (colour_offset - 1 + COLOUR_SCALE) % COLOUR_SCALE;
+                    }
+                    redraw_flag = 1;
+                } else {
+                    // Both position and colour at target, move to next view
+                    printf("Reached view %d/%d\n", current_target_view + 1, num_saved_views);
+                    reset_idle_timer();  // Reset for next cycle
+                    redraw_flag = 1;
+                }
+            } else {
+                // Interpolate toward target (position and zoom only, not colour)
+                scaling += (target->scaling - scaling) * INTERPOLATION_SPEED;
+                x_offset += (target->x_offset - x_offset) * INTERPOLATION_SPEED;
+                y_offset += (target->y_offset - y_offset) * INTERPOLATION_SPEED;
+                // colour_offset stays unchanged until position/zoom snap
+                redraw_flag = 1;
+            }
+            pthread_mutex_unlock(&param_mutex);
+        }
+
         if (redraw_flag) {
             redraw_flag = 0;
             render_mandelbrot(fbp, &vinfo, &finfo);
         }
-        usleep(50000); // Sleep 50ms
+
+        usleep(ANIMATION_STEP_MS * 1000); // Sleep between animation frames
     }
 
     printf("\nExiting...\n");

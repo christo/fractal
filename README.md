@@ -64,7 +64,7 @@ for centre)
 - [x] use GPIO buttons for zoom out
 - [x] use GPIO buttons for reset zoom
 - [x] concurrency for 4-core rpi (4 render threads + touch/button handlers)
-- [ ] test button 4 for electrical continuity (what GPIO?)
+- [x] test button 4 for electrical continuity (GPIO 18, pin 12)
 - [ ] touchscreen swipe to pan
 
 ## Controls
