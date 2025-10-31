@@ -767,10 +767,31 @@ int main(int argc, char* argv[]) {
                     redraw_flag = 1;
                 }
             } else {
-                // Interpolate toward target (position and zoom only, not colour)
-                scaling += (target->scaling - scaling) * INTERPOLATION_SPEED;
-                x_offset += (target->x_offset - x_offset) * INTERPOLATION_SPEED;
-                y_offset += (target->y_offset - y_offset) * INTERPOLATION_SPEED;
+                // Interpolate toward target using screen-space motion
+
+                // First interpolate zoom
+                double new_scaling = scaling + (target->scaling - scaling) * INTERPOLATION_SPEED;
+
+                // Calculate screen center in complex coordinates for current view
+                double center_x = width / 2;
+                double center_y = height / 2;
+                double current_complex_u = center_x * scaling - x_offset;
+                double current_complex_v = center_y * scaling - y_offset;
+
+                // Calculate screen center in complex coordinates for target view
+                double target_complex_u = center_x * target->scaling - target->x_offset;
+                double target_complex_v = center_y * target->scaling - target->y_offset;
+
+                // Interpolate the complex coordinates of the center point
+                double new_complex_u = current_complex_u + (target_complex_u - current_complex_u) * INTERPOLATION_SPEED;
+                double new_complex_v = current_complex_v + (target_complex_v - current_complex_v) * INTERPOLATION_SPEED;
+
+                // Convert back to offsets using the new scaling
+                // Formula: u = center_x * scaling - x_offset, therefore x_offset = center_x * scaling - u
+                x_offset = center_x * new_scaling - new_complex_u;
+                y_offset = center_y * new_scaling - new_complex_v;
+                scaling = new_scaling;
+
                 // colour_offset stays unchanged until position/zoom snap
                 redraw_flag = 1;
             }
