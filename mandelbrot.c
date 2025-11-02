@@ -517,7 +517,7 @@ void render_mandelbrot(char* fbp, struct fb_var_screeninfo* vinfo,
     local_colour_offset = colour_offset;
     pthread_mutex_unlock(&param_mutex);
 
-    printf("Rendering Mandelbrot set (scaling=%.6f, x_off=%.6f, y_off=%.6f)...\n",
+    printf("Rendering * %.6f @ %.6f, %.6f ",
            local_scaling, local_x_offset, local_y_offset);
 
     // Start timing
@@ -558,7 +558,7 @@ void render_mandelbrot(char* fbp, struct fb_var_screeninfo* vinfo,
     long elapsed_ms = (end_time.tv_sec - start_time.tv_sec) * 1000 +
                       (end_time.tv_nsec - start_time.tv_nsec) / 1000000;
 
-    printf("Render complete in %ld ms (4 threads).\n", elapsed_ms);
+    printf(" in %ld ms (4 threads).\n", elapsed_ms);
 }
 
 // Load saved views from file
