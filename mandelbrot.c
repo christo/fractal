@@ -24,8 +24,8 @@
 // Idle animation configuration
 #define IDLE_TIMEOUT_MS 10000      // 10 seconds of inactivity before animation starts
 #define ANIMATION_STEP_MS 50       // Time between animation frames
-#define SNAP_DELTA_SCALING 0.0001  // Snap when scaling difference < this
-#define SNAP_DELTA_OFFSET 0.001    // Snap when offset difference < this
+#define SNAP_DELTA_SCALING_RATIO 0.01  // Snap when scaling ratio difference < this (1% of target)
+#define SNAP_DELTA_SCREEN_PIXELS 2.0   // Snap when screen-space offset difference < this many pixels
 #define INTERPOLATION_SPEED 0.05   // How much to move toward target each step (0.0-1.0)
 
 // Mandelbrot parameters (now mutable for zoom/pan)
@@ -734,14 +734,29 @@ int main(int argc, char* argv[]) {
             pthread_mutex_lock(&param_mutex);
             saved_view_t* target = &saved_views[current_target_view];
 
-            double delta_scaling = fabs(scaling - target->scaling);
-            double delta_x = fabs(x_offset - target->x_offset);
-            double delta_y = fabs(y_offset - target->y_offset);
+            // Calculate scaling difference as a ratio
+            double scaling_ratio_diff = fabs(scaling - target->scaling) / target->scaling;
+
+            // Calculate screen center positions for current and target views
+            double center_x = width / 2.0;
+            double center_y = height / 2.0;
+            double current_complex_u = center_x * scaling - x_offset;
+            double current_complex_v = center_y * scaling - y_offset;
+            double target_complex_u = center_x * target->scaling - target->x_offset;
+            double target_complex_v = center_y * target->scaling - target->y_offset;
+
+            // Calculate screen-space distance (in pixels) at current zoom level
+            // Distance in complex space needs to be divided by current scaling to get pixels
+            double complex_distance_u = fabs(current_complex_u - target_complex_u);
+            double complex_distance_v = fabs(current_complex_v - target_complex_v);
+            double screen_pixels_u = complex_distance_u / scaling;
+            double screen_pixels_v = complex_distance_v / scaling;
+            double screen_pixel_distance = sqrt(screen_pixels_u * screen_pixels_u +
+                                               screen_pixels_v * screen_pixels_v);
 
             // Check if close enough to snap position/zoom (not colour yet)
-            if (delta_scaling < SNAP_DELTA_SCALING &&
-                delta_x < SNAP_DELTA_OFFSET &&
-                delta_y < SNAP_DELTA_OFFSET) {
+            if (scaling_ratio_diff < SNAP_DELTA_SCALING_RATIO &&
+                screen_pixel_distance < SNAP_DELTA_SCREEN_PIXELS) {
                 // Snap position/zoom to target
                 scaling = target->scaling;
                 x_offset = target->x_offset;
@@ -772,17 +787,8 @@ int main(int argc, char* argv[]) {
                 // First interpolate zoom
                 double new_scaling = scaling + (target->scaling - scaling) * INTERPOLATION_SPEED;
 
-                // Calculate screen center in complex coordinates for current view
-                double center_x = width / 2;
-                double center_y = height / 2;
-                double current_complex_u = center_x * scaling - x_offset;
-                double current_complex_v = center_y * scaling - y_offset;
-
-                // Calculate screen center in complex coordinates for target view
-                double target_complex_u = center_x * target->scaling - target->x_offset;
-                double target_complex_v = center_y * target->scaling - target->y_offset;
-
                 // Interpolate the complex coordinates of the center point
+                // (already calculated above: current_complex_u/v and target_complex_u/v)
                 double new_complex_u = current_complex_u + (target_complex_u - current_complex_u) * INTERPOLATION_SPEED;
                 double new_complex_v = current_complex_v + (target_complex_v - current_complex_v) * INTERPOLATION_SPEED;
 
