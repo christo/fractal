@@ -558,7 +558,7 @@ void render_mandelbrot(char* fbp, struct fb_var_screeninfo* vinfo,
     long elapsed_ms = (end_time.tv_sec - start_time.tv_sec) * 1000 +
                       (end_time.tv_nsec - start_time.tv_nsec) / 1000000;
 
-    printf(" in %ld ms (4 threads).\n", elapsed_ms);
+    printf(" in %ld ms\n", elapsed_ms);
 }
 
 // Load saved views from file
